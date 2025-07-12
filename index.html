@@ -45,9 +45,10 @@
             -ms-user-select: none; /* IE 10+ */
             user-select: none; /* Standard syntax */
             overflow: hidden; /* Previene el scroll del body */
+            /* CAMBIO: Se deshabilita el doble toque para hacer zoom */
+            touch-action: manipulation;
         }
 
-        /* CAMBIO: Se usa una variable CSS para la altura dinámica */
         .screen {
             height: calc(var(--vh, 1vh) * 100);
             display: flex;
@@ -690,15 +691,14 @@
         // ===================================================================
         // INICIALIZACIÓN Y EVENT LISTENERS
         // ===================================================================
-        // CAMBIO: Función para ajustar la altura al tamaño real de la ventana
         function setViewportHeight() {
             let vh = window.innerHeight * 0.01;
             document.documentElement.style.setProperty('--vh', `${vh}px`);
         }
 
         function init() {
-            setViewportHeight(); // Se llama al inicio
-            window.addEventListener('resize', setViewportHeight); // Y en cada cambio de tamaño
+            setViewportHeight(); 
+            window.addEventListener('resize', setViewportHeight); 
 
             setupSounds();
             updateSoundButton();
