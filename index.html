@@ -45,7 +45,6 @@
             -ms-user-select: none; /* IE 10+ */
             user-select: none; /* Standard syntax */
             overflow: hidden; /* Previene el scroll del body */
-            /* CAMBIO: Se deshabilita el doble toque para hacer zoom */
             touch-action: manipulation;
         }
 
@@ -171,6 +170,7 @@
         }
         .input-field:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 2px rgba(187, 154, 247, 0.5); }
         .input-field option { background-color: #16161e; color: var(--text-main); }
+        .input-field option:disabled { color: #555; }
 
         /* Toggle Button Fix */
         .toggle-label { transition: background-color 0.2s ease-in-out; }
@@ -197,7 +197,7 @@
                 <div id="tournament-setup" class="hidden space-y-3 pt-3 border-t-2 border-purple-800">
                      <h2 class="text-xl font-bold text-center text-white">Configurar Torneo</h2>
                     <div class="flex space-x-2">
-                        <div class="w-1/2"><label for="player-count" class="block mb-1 text-sm">Jugadores</label><input type="number" id="player-count" value="6" min="4" max="24" class="input-field"></div>
+                        <div class="w-1/2"><label for="player-count" class="block mb-1 text-sm">Jugadores</label><input type="number" id="player-count" value="6" min="2" max="24" class="input-field"></div>
                         <div class="w-1/2"><label for="players-per-team" class="block mb-1 text-sm">Por Equipo</label><select id="players-per-team" class="input-field"><option value="2">2</option><option value="3" selected>3</option></select></div>
                     </div>
                     <div id="player-names-container" class="space-y-1 max-h-[25vh] overflow-y-auto p-1"></div>
@@ -205,7 +205,7 @@
                 </div>
                 <div class="space-y-2 pt-3 border-t-2 border-purple-800">
                     <div class="flex items-center justify-between p-2 bg-gray-900 bg-opacity-50 rounded-lg"><label for="flor-toggle" class="font-semibold text-sm">Jugar con Flor</label><div class="relative inline-block w-10 align-middle"><input type="checkbox" id="flor-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/><label for="flor-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label></div></div>
-                    <div class="flex items-center justify-between p-2 bg-gray-900 bg-opacity-50 rounded-lg"><label for="pica-pica-toggle" class="font-semibold text-sm">Activar Pica-Pica</label><div class="relative inline-block w-10 align-middle"><input type="checkbox" id="pica-pica-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/><label for="pica-pica-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label></div></div>
+                    <div id="pica-pica-option-container" class="flex items-center justify-between p-2 bg-gray-900 bg-opacity-50 rounded-lg transition-opacity duration-300"><label for="pica-pica-toggle" class="font-semibold text-sm">Activar Pica-Pica</label><div class="relative inline-block w-10 align-middle"><input type="checkbox" id="pica-pica-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" checked/><label for="pica-pica-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label></div></div>
                 </div>
                 <div class="space-y-2 pt-4 mt-auto">
                     <button id="start-btn" class="btn btn-primary w-full text-md">Empezar Partida</button>
@@ -461,12 +461,7 @@
                 const match = state.tournament.rounds[state.game.currentRoundIndex].matches[state.game.currentMatchIndex];
                 match.winner = winner.name;
                 match.score = scoreText;
-                const history = loadGeneralHistory();
-                const currentTournament = history.tournaments.find(t => t.id === state.tournament.id);
-                if(currentTournament) {
-                    currentTournament.rounds = state.tournament.rounds;
-                    saveGeneralHistory(history);
-                }
+                updateAndSaveTournamentHistory();
                 buttons.push({ text: 'Volver al Torneo', classes: 'btn-action', onClick: () => { renderTournament(); switchScreen('screenTournament'); } });
             }
             
@@ -553,13 +548,26 @@
                 matchDiv.innerHTML = `<div class="flex-1 text-left truncate"><span class="text-sm ${winnerIsA ? 'font-bold text-green-400' : 'text-gray-500'}">${match.teamA}</span></div><div class="flex-shrink-0"><span class="text-xs bg-gray-800 px-2 py-1 rounded-full font-semibold">${match.score}</span></div><div class="flex-1 text-right truncate"><span class="text-sm ${!winnerIsA ? 'font-bold text-green-400' : 'text-gray-500'}">${match.teamB}</span></div>`;
             } else {
                 const allTeams = state.tournament.teams;
-                const updateOptions = (selectToUpdate, valueToHide) => {
-                    Array.from(selectToUpdate.options).forEach(option => { option.style.display = (option.value === valueToHide && valueToHide !== '') ? 'none' : 'block'; });
+                
+                const updateOpponentOptions = (select1, select2) => {
+                    const selectedValue = select1.value;
+                    Array.from(select2.options).forEach(option => {
+                        option.disabled = (option.value === selectedValue && selectedValue !== '');
+                    });
                 };
+
                 const selectA = createTeamSelect(allTeams, match.teamA);
                 const selectB = createTeamSelect(allTeams, match.teamB);
-                selectA.onchange = (e) => { state.tournament.rounds[roundIndex].matches[matchIndex].teamA = e.target.value; updateOptions(selectB, e.target.value); };
-                selectB.onchange = (e) => { state.tournament.rounds[roundIndex].matches[matchIndex].teamB = e.target.value; updateOptions(selectA, e.target.value); };
+
+                selectA.onchange = (e) => {
+                    state.tournament.rounds[roundIndex].matches[matchIndex].teamA = e.target.value;
+                    updateOpponentOptions(selectA, selectB);
+                };
+                selectB.onchange = (e) => {
+                    state.tournament.rounds[roundIndex].matches[matchIndex].teamB = e.target.value;
+                    updateOpponentOptions(selectB, selectA);
+                };
+                
                 const playBtn = document.createElement('button');
                 playBtn.textContent = 'Jugar';
                 playBtn.className = 'btn btn-action !py-1 px-2 text-xs';
@@ -569,9 +577,10 @@
                         startGame({ mode: 'tournament', teams: [{ name: currentMatch.teamA, score: 0, color: 'var(--accent-blue)' }, { name: currentMatch.teamB, score: 0, color: 'var(--accent-red)' }], settings: state.tournament.settings, isFinished: false, currentRoundIndex: roundIndex, currentMatchIndex: matchIndex });
                     } else { showModal("Error", "<p>Selecciona dos equipos diferentes para jugar.</p>"); }
                 };
+
                 matchDiv.append(selectA, document.createTextNode('vs'), selectB, playBtn);
-                updateOptions(selectB, selectA.value);
-                updateOptions(selectA, selectB.value);
+                updateOpponentOptions(selectA, selectB);
+                updateOpponentOptions(selectB, selectA);
             }
             return matchDiv;
         }
@@ -606,12 +615,7 @@
                     const newTeamName = formatTeamName(playerNames);
                     state.tournament.teams.push(newTeamName);
                     
-                    const history = loadGeneralHistory();
-                    const currentTournament = history.tournaments.find(t => t.id === state.tournament.id);
-                    if (currentTournament) { 
-                        currentTournament.teams.push(newTeamName); 
-                        saveGeneralHistory(history); 
-                    }
+                    updateAndSaveTournamentHistory();
                     
                     renderTournament();
                     hideModal();
@@ -622,55 +626,23 @@
         // ===================================================================
         // LÓGICA DE HISTORIAL Y EDICIÓN
         // ===================================================================
-        function loadGeneralHistory() { return JSON.parse(localStorage.getItem('trucoHistoryV26')) || { tournaments: [] }; }
-        function saveGeneralHistory(history) { localStorage.setItem('trucoHistoryV26', JSON.stringify(history)); }
+        function loadGeneralHistory() { return JSON.parse(localStorage.getItem('trucoHistoryV27')) || { tournaments: [] }; }
+        function saveGeneralHistory(history) { localStorage.setItem('trucoHistoryV27', JSON.stringify(history)); }
 
-        function showTournamentHistory() {
+        function updateAndSaveTournamentHistory() {
+            if (!state.tournament || !state.tournament.id) return;
             const history = loadGeneralHistory();
-            const currentTournament = history.tournaments.find(t => t.id === state.tournament.id);
-            if (!currentTournament) {
-                showModal("Error", "No se encontró el historial para este torneo.");
-                return;
+            const tournamentIndex = history.tournaments.findIndex(t => t.id === state.tournament.id);
+            if (tournamentIndex !== -1) {
+                history.tournaments[tournamentIndex] = JSON.parse(JSON.stringify(state.tournament));
+                saveGeneralHistory(history);
             }
-
-            const wins = {};
-            currentTournament.teams.forEach(team => wins[team] = 0);
-            currentTournament.rounds.forEach(round => {
-                round.matches.forEach(match => {
-                    if (match.winner && wins[match.winner] !== undefined) {
-                        wins[match.winner]++;
-                    }
-                });
-            });
-
-            let bodyHtml = '<div class="space-y-4">';
-            bodyHtml += '<div><h3 class="text-lg font-bold text-purple-400 mb-2">Tabla de Victorias</h3><div class="space-y-1">';
-            Object.entries(wins).sort(([,a],[,b]) => b-a).forEach(([team, count]) => {
-                bodyHtml += `<div class="flex justify-between text-sm"><span class="truncate pr-4">${team}</span><span class="font-bold">${count}</span></div>`;
-            });
-            bodyHtml += '</div></div>';
-
-            bodyHtml += '<div><h3 class="text-lg font-bold text-purple-400 mb-2 mt-4">Resultados de Partidas</h3><div class="space-y-1 max-h-48 overflow-y-auto">';
-            let matchCount = 0;
-            currentTournament.rounds.forEach((round, i) => {
-                round.matches.forEach(match => {
-                    if (match.winner) {
-                        matchCount++;
-                        bodyHtml += `<div class="text-sm p-2 bg-black bg-opacity-25 rounded"><strong>Ronda ${i+1}:</strong> ${match.teamA} vs ${match.teamB} &rarr; <span class="font-bold text-green-300">${match.score}</span></div>`;
-                    }
-                });
-            });
-             if (matchCount === 0) {
-                bodyHtml += '<p class="text-sm text-gray-400">Aún no se han jugado partidas.</p>';
-            }
-            bodyHtml += '</div></div>';
-            bodyHtml += '</div>';
-
-            showModal("Historial del Torneo", bodyHtml);
         }
 
         function promptForNameChange(teamIndex) {
             const team = state.game.teams[teamIndex];
+            const originalName = team.name; 
+
             const body = `<input type="text" id="edit-name-input" class="input-field" value="${team.name}">`;
             showModal("Cambiar Nombre", body, [
                 { text: 'Cancelar', classes: 'bg-gray-700' },
@@ -681,6 +653,23 @@
                         const nameEl = DOM.gameContainer.children[teamIndex].querySelector('.team-name');
                         if (nameEl) nameEl.textContent = newName;
                         renderGameHistoryButton();
+
+                        if (state.game.mode === 'tournament' && newName !== originalName) {
+                            const teamIndexInTournament = state.tournament.teams.indexOf(originalName);
+                            if (teamIndexInTournament > -1) {
+                                state.tournament.teams[teamIndexInTournament] = newName;
+                            }
+
+                            state.tournament.rounds.forEach(round => {
+                                round.matches.forEach(match => {
+                                    if (match.teamA === originalName) match.teamA = newName;
+                                    if (match.teamB === originalName) match.teamB = newName;
+                                    if (match.winner === originalName) match.winner = newName;
+                                });
+                            });
+                            
+                            updateAndSaveTournamentHistory();
+                        }
                     }
                     hideModal();
                 }}
@@ -696,6 +685,21 @@
             document.documentElement.style.setProperty('--vh', `${vh}px`);
         }
 
+        function updatePicaPicaAvailability() {
+            const isTournament = DOM.gameMode.value === 'tournament';
+            const playersPerTeam = parseInt(DOM.playersPerTeam.value);
+
+            // CAMBIO: La lógica ahora depende de playersPerTeam
+            if (isTournament && playersPerTeam !== 3) {
+                DOM.picaPicaToggle.checked = false;
+                DOM.picaPicaToggle.disabled = true;
+                DOM.picaPicaOptionContainer.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                DOM.picaPicaToggle.disabled = false;
+                DOM.picaPicaOptionContainer.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
         function init() {
             setViewportHeight(); 
             window.addEventListener('resize', setViewportHeight); 
@@ -706,8 +710,11 @@
                 const isTournament = e.target.value === 'tournament';
                 DOM.tournamentSetup.classList.toggle('hidden', !isTournament);
                 DOM.startBtn.textContent = isTournament ? 'Crear Torneo' : 'Empezar Partida';
+                updatePicaPicaAvailability();
             });
-            [DOM.playerCount, DOM.playersPerTeam].forEach(el => el.addEventListener('input', generatePlayerNameInputs));
+            DOM.playerCount.addEventListener('input', generatePlayerNameInputs);
+            DOM.playersPerTeam.addEventListener('input', updatePicaPicaAvailability); // Se agrega listener aquí
+            
             DOM.startBtn.addEventListener('click', () => { playSound('click'); if (DOM.gameMode.value === 'quick') startGame('new_quick'); else createTournament(); });
             DOM.backToMenuBtn.addEventListener('click', () => { playSound('click'); if (state.game && state.game.mode === 'tournament') { renderTournament(); switchScreen('screenTournament'); } else switchScreen('screenSetup'); });
             DOM.backToSetupBtn.addEventListener('click', () => { playSound('click'); switchScreen('screenSetup'); });
@@ -734,11 +741,14 @@
             DOM.addTeamBtn.addEventListener('click', () => { playSound('click'); showAddTeamModal(); });
             DOM.tournamentHistoryBtn.addEventListener('click', () => { playSound('click'); showTournamentHistory(); });
             generatePlayerNameInputs();
-            switchScreen('screenSetup');
+            updatePicaPicaAvailability(); // Llamada inicial
         }
         
         function updateSoundButton() { DOM.soundToggleBtn.innerHTML = soundEnabled ? ICONS.soundOn : ICONS.soundOff; }
-        function generatePlayerNameInputs() { const count = parseInt(DOM.playerCount.value); DOM.playerNamesContainer.innerHTML = Array.from({length: count}, (_, i) => `<input type="text" placeholder="Jugador ${i + 1}" class="input-field text-sm">`).join('<div class="h-1"></div>'); }
+        function generatePlayerNameInputs() { 
+            const count = parseInt(DOM.playerCount.value); 
+            DOM.playerNamesContainer.innerHTML = Array.from({length: count}, (_, i) => `<input type="text" placeholder="Jugador ${i + 1}" class="input-field text-sm">`).join('<div class="h-1"></div>');
+        }
 
         // ===================================================================
         // LÓGICA DE FÓSFOROS Y EVENTOS
